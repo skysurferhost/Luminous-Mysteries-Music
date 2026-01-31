@@ -28,7 +28,6 @@
     min-height: 20px;
   }
 
-  /* Timeline */
   .timeline {
     width: 100%;
     height: 6px;
@@ -44,6 +43,7 @@
     width: 0%;
     background: #fff;
     border-radius: 4px;
+    pointer-events: none;
   }
 
   .marker {
@@ -54,7 +54,6 @@
     background: rgba(255,255,255,0.4);
   }
 
-  /* Controls */
   .controls {
     display: flex;
     align-items: center;
@@ -75,11 +74,6 @@
     justify-content: center;
   }
 
-  .btn:active {
-    transform: scale(0.95);
-  }
-
-  /* Play / Pause */
   .play-icon {
     width: 0;
     height: 0;
@@ -106,7 +100,6 @@
     font-weight: bold;
   }
 
-  /* Volume */
   .volume-container {
     position: relative;
   }
@@ -136,21 +129,18 @@
     left: 50%;
     transform: translateX(-50%);
     width: 100px;
-    background: transparent;
   }
 
   .volume-container.open .volume-slider {
     display: block;
   }
 
-  /* Slider track = white */
   .volume-slider::-webkit-slider-runnable-track {
     height: 4px;
     background: #fff;
     border-radius: 4px;
   }
 
-  /* Slider thumb = BLACK */
   .volume-slider::-webkit-slider-thumb {
     -webkit-appearance: none;
     width: 12px;
@@ -158,19 +148,6 @@
     background: #000;
     border-radius: 50%;
     margin-top: -4px;
-    cursor: pointer;
-  }
-
-  .volume-slider::-moz-range-track {
-    height: 4px;
-    background: #fff;
-  }
-
-  .volume-slider::-moz-range-thumb {
-    width: 12px;
-    height: 12px;
-    background: #000;
-    border-radius: 50%;
     cursor: pointer;
   }
 </style>
@@ -201,14 +178,7 @@
         </svg>
       </button>
 
-      <input
-        type="range"
-        class="volume-slider"
-        min="0"
-        max="1"
-        step="0.01"
-        value="1"
-        oninput="setVolume(this.value)">
+      <input type="range" class="volume-slider" min="0" max="1" step="0.01" value="1" oninput="setVolume(this.value)">
     </div>
 
     <button class="btn" onclick="nextSegment()"><span class="skip">⟩</span></button>
@@ -234,21 +204,19 @@
   const volumeContainer = document.getElementById("volumeContainer");
   const volIcon = document.getElementById("volIcon");
 
-  let durations = [], offsets = [], totalDuration = 0, currentIndex = 0;
+  let durations = [], offsets = [], totalDuration = 0;
+  let currentIndex = 0;
+  let dragging = false;
 
-  Promise.all(tracks.map(t =>
-    new Promise(res => {
-      const a = new Audio(t.src);
-      a.onloadedmetadata = () => res(a.duration);
-    })
-  )).then(times => {
+  Promise.all(tracks.map(t => new Promise(res => {
+    const a = new Audio(t.src);
+    a.onloadedmetadata = () => res(a.duration);
+  }))).then(times => {
     durations = times;
     offsets = times.map((_, i) => times.slice(0, i).reduce((a, b) => a + b, 0));
     totalDuration = times.reduce((a, b) => a + b, 0);
     drawMarkers();
     loadTrack(0);
-
-    // 🔊 Attempt autoplay
     audio.play().catch(() => {
       document.addEventListener("click", () => audio.play(), { once: true });
     });
@@ -289,6 +257,35 @@
     const globalTime = offsets[currentIndex] + audio.currentTime;
     progress.style.width = `${(globalTime / totalDuration) * 100}%`;
   });
+
+  function seekTo(percent) {
+    const targetTime = percent * totalDuration;
+    const index = offsets.findIndex((o, i) => targetTime < o + durations[i]);
+    loadTrack(index);
+    audio.currentTime = targetTime - offsets[index];
+  }
+
+  function handleSeek(clientX) {
+    const rect = timeline.getBoundingClientRect();
+    const pct = Math.min(Math.max((clientX - rect.left) / rect.width, 0), 1);
+    seekTo(pct);
+  }
+
+  timeline.addEventListener("mousedown", e => {
+    dragging = true;
+    handleSeek(e.clientX);
+  });
+
+  window.addEventListener("mousemove", e => dragging && handleSeek(e.clientX));
+  window.addEventListener("mouseup", () => dragging = false);
+
+  timeline.addEventListener("touchstart", e => {
+    dragging = true;
+    handleSeek(e.touches[0].clientX);
+  }, { passive: true });
+
+  timeline.addEventListener("touchmove", e => dragging && handleSeek(e.touches[0].clientX), { passive: true });
+  window.addEventListener("touchend", () => dragging = false);
 
   function prevSegment() {
     if (currentIndex > 0) loadTrack(currentIndex - 1);
