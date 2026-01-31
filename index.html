@@ -256,6 +256,7 @@
   audio.addEventListener("timeupdate", () => {
     const globalTime = offsets[currentIndex] + audio.currentTime;
     progress.style.width = `${(globalTime / totalDuration) * 100}%`;
+    audio.addEventListener("ended", nextSegment);
   });
 
   function seekTo(percent) {
